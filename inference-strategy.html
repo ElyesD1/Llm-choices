@@ -1,0 +1,717 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SentinelAI — Inference Strategy</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Inter:wght@300;400;500;600;700&display=swap');
+
+  :root {
+    --bg: #07090f;
+    --surface: #0e1320;
+    --surface2: #141b2d;
+    --border: #1c2a42;
+    --mint: #3effa8;
+    --blue: #4d9fff;
+    --coral: #ff6b6b;
+    --amber: #ffd166;
+    --purple: #b57bee;
+    --teal: #00d4d4;
+    --text: #dce9ff;
+    --muted: #4a6080;
+    --muted2: #8098b8;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    font-family: 'Inter', sans-serif;
+    color: var(--text);
+    padding: 48px 40px 64px;
+    min-width: 1180px;
+  }
+
+  /* HEADER */
+  .header {
+    display: flex; align-items: flex-end; justify-content: space-between;
+    margin-bottom: 32px; padding-bottom: 24px; border-bottom: 1px solid var(--border);
+  }
+  .eyebrow {
+    font-family: 'IBM Plex Mono', monospace; font-size: 10px; color: var(--mint);
+    letter-spacing: 3px; text-transform: uppercase; margin-bottom: 8px;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .eyebrow::before { content: ''; width: 20px; height: 1px; background: var(--mint); display: inline-block; }
+  .main-title { font-size: 26px; font-weight: 700; letter-spacing: -0.8px; }
+  .main-title span { color: var(--mint); }
+  .header-meta { font-family: 'IBM Plex Mono', monospace; font-size: 10px; color: var(--muted); text-align: right; line-height: 2.2; }
+
+  /* SECTION LABEL */
+  .sec-label {
+    font-family: 'IBM Plex Mono', monospace; font-size: 9px; text-transform: uppercase;
+    letter-spacing: 3px; color: var(--muted2); margin: 28px 0 12px;
+    display: flex; align-items: center; gap: 12px;
+  }
+  .sec-label::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+
+  /* KEY INSIGHT BOX */
+  .insight {
+    background: rgba(62,255,168,0.05); border: 1px solid rgba(62,255,168,0.2);
+    border-radius: 10px; padding: 14px 20px; margin-bottom: 24px;
+    font-size: 12px; color: var(--muted2); line-height: 1.7;
+    display: flex; gap: 12px; align-items: flex-start;
+  }
+  .insight-icon { font-size: 18px; flex-shrink: 0; }
+  .insight strong { color: var(--mint); }
+
+  /* ── TABLES ── */
+  table { width: 100%; border-collapse: collapse; border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+  thead tr { background: var(--surface2); }
+  thead th {
+    font-family: 'IBM Plex Mono', monospace; font-size: 9px; text-transform: uppercase;
+    letter-spacing: 2px; color: var(--muted2); padding: 11px 15px;
+    text-align: left; border-bottom: 1px solid var(--border);
+    border-right: 1px solid var(--border); font-weight: 500;
+  }
+  thead th:last-child { border-right: none; }
+  tbody tr { background: var(--surface); border-bottom: 1px solid var(--border); transition: background 0.15s; }
+  tbody tr:last-child { border-bottom: none; }
+  tbody tr:hover { background: var(--surface2); }
+  td { padding: 13px 15px; font-size: 12px; vertical-align: top; line-height: 1.55; border-right: 1px solid var(--border); }
+  td:last-child { border-right: none; }
+
+  /* AGENT CELL */
+  .ag-num { font-family: 'IBM Plex Mono', monospace; font-size: 8px; color: var(--muted); display: block; margin-bottom: 3px; letter-spacing: 1px; }
+  .ag-name { font-size: 12px; font-weight: 700; }
+  .ag-ico { margin-right: 4px; }
+
+  /* MODEL BADGE */
+  .mbadge {
+    display: inline-flex; align-items: center; gap: 5px;
+    border-radius: 5px; padding: 4px 10px; font-weight: 600;
+    font-size: 11px; border: 1px solid; margin-bottom: 3px;
+  }
+  .mbadge .dot { width: 5px; height: 5px; border-radius: 50%; flex-shrink: 0; }
+  .mb-deepseek { background: rgba(62,255,168,0.08); border-color: rgba(62,255,168,0.3); color: var(--mint); }
+  .mb-deepseek .dot { background: var(--mint); }
+  .mb-mistral  { background: rgba(255,209,102,0.08); border-color: rgba(255,209,102,0.3); color: var(--amber); }
+  .mb-mistral  .dot { background: var(--amber); }
+  .mb-llama    { background: rgba(77,159,255,0.08); border-color: rgba(77,159,255,0.3); color: var(--blue); }
+  .mb-llama    .dot { background: var(--blue); }
+  .mb-qwen     { background: rgba(181,123,238,0.08); border-color: rgba(181,123,238,0.25); color: var(--purple); }
+  .mb-qwen     .dot { background: var(--purple); }
+
+  /* PROVIDER BADGE */
+  .prov {
+    display: inline-block; font-family: 'IBM Plex Mono', monospace; font-size: 9px;
+    padding: 2px 8px; border-radius: 4px; border: 1px solid;
+    margin: 2px 2px 0 0; white-space: nowrap; font-weight: 500;
+  }
+  .pv-groq   { background: rgba(255,107,107,0.08); border-color: rgba(255,107,107,0.25); color: var(--coral); }
+  .pv-or     { background: rgba(77,159,255,0.08); border-color: rgba(77,159,255,0.25); color: var(--blue); }
+  .pv-tog    { background: rgba(181,123,238,0.08); border-color: rgba(181,123,238,0.25); color: var(--purple); }
+  .pv-local  { background: rgba(62,255,168,0.08); border-color: rgba(62,255,168,0.25); color: var(--mint); }
+  .pv-ds     { background: rgba(255,209,102,0.08); border-color: rgba(255,209,102,0.25); color: var(--amber); }
+
+  /* COST BADGE */
+  .cost-free { display: inline-block; background: rgba(62,255,168,0.1); border: 1px solid rgba(62,255,168,0.3); color: var(--mint); font-family: 'IBM Plex Mono', monospace; font-size: 9px; padding: 2px 9px; border-radius: 20px; }
+  .cost-micro { display: inline-block; background: rgba(255,209,102,0.1); border: 1px solid rgba(255,209,102,0.3); color: var(--amber); font-family: 'IBM Plex Mono', monospace; font-size: 9px; padding: 2px 9px; border-radius: 20px; }
+
+  /* SMALL TEXT */
+  .note { font-size: 10px; color: var(--muted2); margin-top: 4px; font-family: 'IBM Plex Mono', monospace; }
+
+  /* PROVIDER CARDS */
+  .prov-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-bottom: 0; }
+  .prov-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+  .prov-card-head { padding: 12px 16px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 10px; }
+  .prov-card-head .ph-icon { font-size: 20px; }
+  .prov-card-head .ph-name { font-size: 14px; font-weight: 700; }
+  .prov-card-head .ph-tag { font-family: 'IBM Plex Mono', monospace; font-size: 9px; margin-left: auto; padding: 2px 8px; border-radius: 3px; }
+  .prov-card-body { padding: 14px 16px; }
+  .prov-detail { font-size: 11px; color: var(--muted2); line-height: 1.7; }
+  .prov-detail strong { color: var(--text); font-weight: 600; }
+  .prov-models { margin-top: 10px; display: flex; flex-wrap: wrap; gap: 5px; }
+  .pm-tag { font-family: 'IBM Plex Mono', monospace; font-size: 9px; background: rgba(255,255,255,0.04); border: 1px solid var(--border); color: var(--muted2); padding: 2px 8px; border-radius: 3px; }
+  .prov-limit { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border); font-family: 'IBM Plex Mono', monospace; font-size: 9px; color: var(--muted); }
+
+  /* STEP FLOW */
+  .steps { display: flex; flex-direction: column; gap: 10px; }
+  .step { display: flex; gap: 14px; align-items: flex-start; }
+  .step-num { width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-family: 'IBM Plex Mono', monospace; font-size: 11px; font-weight: 600; flex-shrink: 0; margin-top: 2px; }
+  .step-content { flex: 1; }
+  .step-title { font-size: 13px; font-weight: 700; margin-bottom: 3px; }
+  .step-desc { font-size: 11px; color: var(--muted2); line-height: 1.6; }
+  .step-desc strong { color: var(--text); }
+  .step-code { font-family: 'IBM Plex Mono', monospace; font-size: 10px; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 8px 12px; margin-top: 6px; color: var(--mint); line-height: 1.8; }
+  .step-code .cm { color: var(--muted); }
+
+  /* ENV TABLE */
+  .env-table { width: 100%; border-collapse: collapse; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; margin-top: 0; }
+  .env-table td { padding: 10px 14px; font-size: 11px; border-bottom: 1px solid var(--border); border-right: 1px solid var(--border); }
+  .env-table tr:last-child td { border-bottom: none; }
+  .env-table td:last-child { border-right: none; }
+  .env-table td:first-child { font-family: 'IBM Plex Mono', monospace; font-size: 10px; color: var(--mint); width: 28%; background: rgba(0,0,0,0.2); }
+  .env-table td:nth-child(2) { color: var(--muted2); width: 37%; }
+  .env-table td:nth-child(3) { width: 35%; }
+
+  /* TWO COL LAYOUT */
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .box { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+  .box-head { padding: 11px 16px; background: var(--surface2); border-bottom: 1px solid var(--border); font-family: 'IBM Plex Mono', monospace; font-size: 9px; text-transform: uppercase; letter-spacing: 2px; }
+  .box-body { padding: 16px; }
+
+  /* WARNING BOX */
+  .warn { background: rgba(255,107,107,0.05); border: 1px solid rgba(255,107,107,0.2); border-radius: 10px; padding: 14px 20px; font-size: 11px; color: var(--muted2); line-height: 1.7; display: flex; gap: 10px; }
+  .warn strong { color: var(--coral); }
+
+  /* SUCCESS BOX */
+  .success { background: rgba(62,255,168,0.04); border: 1px solid rgba(62,255,168,0.15); border-radius: 10px; padding: 14px 20px; font-size: 11px; color: var(--muted2); line-height: 1.7; display: flex; gap: 10px; }
+  .success strong { color: var(--mint); }
+
+  /* FOOTER */
+  .footer { margin-top: 40px; padding-top: 20px; border-top: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
+  .footer-note { font-family: 'IBM Plex Mono', monospace; font-size: 10px; color: var(--muted); }
+  .footer-brand { font-size: 13px; font-weight: 700; letter-spacing: -0.4px; }
+  .footer-brand span { color: var(--mint); }
+
+  /* Code inline */
+  code { font-family: 'IBM Plex Mono', monospace; font-size: 10px; background: rgba(77,159,255,0.08); border: 1px solid rgba(77,159,255,0.2); color: var(--blue); padding: 1px 6px; border-radius: 3px; }
+
+  /* Divider */
+  .divider { height: 1px; background: var(--border); margin: 24px 0; }
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<div class="header">
+  <div>
+    <div class="eyebrow">Inference Strategy — Complete Guide</div>
+    <div class="main-title"><span>Sentinel</span>AI — How & Where to Run Every Model</div>
+  </div>
+  <div class="header-meta">
+    Blue Team · Challenge 2026<br>
+    7 Agents · 3 Free Providers<br>
+    Zero Infrastructure Cost
+  </div>
+</div>
+
+<!-- KEY INSIGHT -->
+<div class="insight">
+  <span class="insight-icon">💡</span>
+  <span>
+    <strong>The core misconception:</strong> You don't run 7 models at the same time. The LangGraph pipeline runs agents <strong>sequentially</strong> — one after another. At any given moment, only one model is active and receiving a request. This means you need <strong>zero local GPU</strong>. Your laptop just sends HTTP requests to free cloud providers (Groq, OpenRouter, together.ai) who run the models on their servers. Your machine only needs <strong>Python + internet</strong>.
+  </span>
+</div>
+
+
+<!-- ══════════════════════════════════════════════════════════ -->
+<!-- SECTION 1: AGENT → MODEL → PROVIDER TABLE -->
+<!-- ══════════════════════════════════════════════════════════ -->
+<div class="sec-label">Section 1 — Agent to Model to Provider Mapping</div>
+
+<table>
+  <thead>
+    <tr>
+      <th style="width:15%">Agent</th>
+      <th style="width:17%">Model Assigned</th>
+      <th style="width:16%">Provider (Where it Runs)</th>
+      <th style="width:12%">Cost</th>
+      <th style="width:40%">What Happens in Practice</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>
+        <span class="ag-num">AGENT 01</span>
+        <span class="ag-ico">🗺</span>
+        <span class="ag-name">Intake & Routing</span>
+      </td>
+      <td>
+        <div class="mbadge mb-mistral"><div class="dot"></div>Mistral 7B Instruct</div>
+      </td>
+      <td>
+        <span class="prov pv-groq">Groq</span>
+        <div class="note">Fallback: Ollama local</div>
+      </td>
+      <td><span class="cost-free">Free</span></td>
+      <td style="font-size:11px;color:var(--muted2);line-height:1.6;">User submits query → your FastAPI backend sends it to Groq's API → Mistral 7B parses it in ~0.5s → returns structured JSON schema → pipeline starts. <strong style="color:var(--text);">No GPU needed on your side.</strong></td>
+    </tr>
+    <tr>
+      <td>
+        <span class="ag-num">AGENT 02</span>
+        <span class="ag-ico">🌍</span>
+        <span class="ag-name">Geopolitical & Macro</span>
+      </td>
+      <td>
+        <div class="mbadge mb-deepseek"><div class="dot"></div>DeepSeek-V3</div>
+      </td>
+      <td>
+        <span class="prov pv-or">OpenRouter</span>
+        <span class="prov pv-ds">DeepSeek API</span>
+        <div class="note">Fallback: together.ai</div>
+      </td>
+      <td><span class="cost-micro">~$0.07/M tok</span></td>
+      <td style="font-size:11px;color:var(--muted2);line-height:1.6;">Retrieved GDELT + FRED documents are sent to DeepSeek-V3 via OpenRouter. Model synthesizes geopolitical events + macro indicators into a structured report. 128K context handles long document batches. <strong style="color:var(--text);">$0.07 per million tokens — a full analysis costs fractions of a cent.</strong></td>
+    </tr>
+    <tr>
+      <td>
+        <span class="ag-num">AGENT 03</span>
+        <span class="ag-ico">📡</span>
+        <span class="ag-name">Market Sentiment</span>
+      </td>
+      <td>
+        <div class="mbadge mb-qwen"><div class="dot"></div>Qwen2.5-72B</div>
+      </td>
+      <td>
+        <span class="prov pv-tog">together.ai</span>
+        <div class="note">Fallback: OpenRouter</div>
+      </td>
+      <td><span class="cost-free">Free credits</span></td>
+      <td style="font-size:11px;color:var(--muted2);line-height:1.6;">News + social signal batches sent to Qwen2.5-72B on together.ai. Model clusters sentiment, detects tone divergence, returns structured JSON scores per asset. together.ai gives <strong style="color:var(--text);">$25 free credits on signup</strong> — more than enough for the challenge.</td>
+    </tr>
+    <tr>
+      <td>
+        <span class="ag-num">AGENT 04</span>
+        <span class="ag-ico">💹</span>
+        <span class="ag-name">Asset-Specific Analyst</span>
+      </td>
+      <td>
+        <div class="mbadge mb-deepseek"><div class="dot"></div>DeepSeek-R1 Distill 32B</div>
+      </td>
+      <td>
+        <span class="prov pv-groq">Groq</span>
+        <div class="note">Fallback: OpenRouter</div>
+      </td>
+      <td><span class="cost-free">Free</span></td>
+      <td style="font-size:11px;color:var(--muted2);line-height:1.6;">Price data + geopolitical + sentiment signals are sent to DeepSeek-R1 on Groq. Model produces <strong style="color:var(--text);">visible chain-of-thought reasoning</strong> per asset class — Gold, Oil, S&P 500, BTC, ETH — with pressure scores and scenario narratives.</td>
+    </tr>
+    <tr>
+      <td>
+        <span class="ag-num">AGENT 05</span>
+        <span class="ag-ico">🧮</span>
+        <span class="ag-name">Quant & Risk Aggregation</span>
+      </td>
+      <td>
+        <div class="mbadge mb-deepseek"><div class="dot"></div>DeepSeek-R1 (Full)</div>
+      </td>
+      <td>
+        <span class="prov pv-or">OpenRouter</span>
+        <span class="prov pv-ds">DeepSeek API</span>
+        <div class="note">Fallback: together.ai</div>
+      </td>
+      <td><span class="cost-micro">~$0.55/M tok</span></td>
+      <td style="font-size:11px;color:var(--muted2);line-height:1.6;">Python scipy/statsmodels runs Monte Carlo + GARCH locally on your server (pure math, no LLM needed). Then the aggregated numerical results are sent to DeepSeek-R1 to <strong style="color:var(--text);">interpret, weight, and produce probability-scored risk scenarios</strong> in structured JSON.</td>
+    </tr>
+    <tr>
+      <td>
+        <span class="ag-num">AGENT 06</span>
+        <span class="ag-ico">🛡</span>
+        <span class="ag-name">Critic & Verification</span>
+      </td>
+      <td>
+        <div class="mbadge mb-llama"><div class="dot"></div>Llama 3.3 70B Instruct</div>
+      </td>
+      <td>
+        <span class="prov pv-groq">Groq</span>
+        <div class="note">Fallback: together.ai</div>
+      </td>
+      <td><span class="cost-free">Free</span></td>
+      <td style="font-size:11px;color:var(--muted2);line-height:1.6;">All previous agent outputs sent to Llama 3.3 70B on Groq. Deliberately a <strong style="color:var(--text);">different model family</strong> than the agents it verifies — prevents correlated errors. Returns a structured verdict: PASS / FAIL / REVISE with specific flags per agent output.</td>
+    </tr>
+    <tr>
+      <td>
+        <span class="ag-num">AGENT 07</span>
+        <span class="ag-ico">📦</span>
+        <span class="ag-name">Report Synthesis</span>
+      </td>
+      <td>
+        <div class="mbadge mb-mistral"><div class="dot"></div>Mistral Small 3 (24B)</div>
+      </td>
+      <td>
+        <span class="prov pv-groq">Groq</span>
+        <div class="note">Fallback: Mistral API</div>
+      </td>
+      <td><span class="cost-free">Free</span></td>
+      <td style="font-size:11px;color:var(--muted2);line-height:1.6;">All verified outputs assembled into a final prompt → sent to Mistral Small 3 on Groq → returns structured dashboard payload + narrative text for PDF. <strong style="color:var(--text);">WeasyPrint then generates the PDF locally</strong> on your server with no LLM needed for formatting.</td>
+    </tr>
+  </tbody>
+</table>
+
+
+<!-- ══════════════════════════════════════════════════════════ -->
+<!-- SECTION 2: PROVIDER DETAILS -->
+<!-- ══════════════════════════════════════════════════════════ -->
+<div class="sec-label">Section 2 — The 3 Free Providers You Need</div>
+
+<div class="prov-grid">
+
+  <!-- GROQ -->
+  <div class="prov-card">
+    <div class="prov-card-head" style="background:rgba(255,107,107,0.06);border-color:rgba(255,107,107,0.2);">
+      <span class="ph-icon">🚀</span>
+      <span class="ph-name" style="color:var(--coral);">Groq Cloud</span>
+      <span class="ph-tag" style="background:rgba(255,107,107,0.1);color:var(--coral);border:1px solid rgba(255,107,107,0.3);">PRIMARY</span>
+    </div>
+    <div class="prov-card-body">
+      <div class="prov-detail">
+        <strong>Fastest inference available</strong> — 300+ tokens/sec via custom LPU chips. Handles Agents 01, 04, 06, 07.<br><br>
+        <strong>Free tier limits:</strong> 14,400 requests/day · 500,000 tokens/day · 6,000 tokens/min per model. For a challenge demo, this is practically unlimited.<br><br>
+        <strong>Register:</strong> console.groq.com → API Keys → Create Key
+      </div>
+      <div class="prov-models">
+        <span class="pm-tag">mistral-7b-instruct</span>
+        <span class="pm-tag">llama-3.3-70b-versatile</span>
+        <span class="pm-tag">deepseek-r1-distill-llama-70b</span>
+        <span class="pm-tag">mixtral-8x7b</span>
+      </div>
+      <div class="prov-limit">GROQ_API_KEY=gsk_xxxx → set in .env file</div>
+    </div>
+  </div>
+
+  <!-- OPENROUTER -->
+  <div class="prov-card">
+    <div class="prov-card-head" style="background:rgba(77,159,255,0.06);border-color:rgba(77,159,255,0.2);">
+      <span class="ph-icon">🔀</span>
+      <span class="ph-name" style="color:var(--blue);">OpenRouter</span>
+      <span class="ph-tag" style="background:rgba(77,159,255,0.1);color:var(--blue);border:1px solid rgba(77,159,255,0.3);">DEEP REASONING</span>
+    </div>
+    <div class="prov-card-body">
+      <div class="prov-detail">
+        <strong>$5 free credits on signup</strong> — routes to 200+ models including DeepSeek-V3 and R1 full. Handles Agents 02 and 05 (heaviest reasoning tasks).<br><br>
+        <strong>Key advantage:</strong> Single API key accesses every model. If one model is down or too slow, you switch model string only — no code change.<br><br>
+        <strong>Register:</strong> openrouter.ai → Sign Up → Free Credits
+      </div>
+      <div class="prov-models">
+        <span class="pm-tag">deepseek/deepseek-chat (V3)</span>
+        <span class="pm-tag">deepseek/deepseek-r1</span>
+        <span class="pm-tag">qwen/qwen-2.5-72b-instruct</span>
+        <span class="pm-tag">meta-llama/llama-3.3-70b</span>
+      </div>
+      <div class="prov-limit">OPENROUTER_API_KEY=sk-or-xxxx → set in .env file</div>
+    </div>
+  </div>
+
+  <!-- TOGETHER.AI -->
+  <div class="prov-card">
+    <div class="prov-card-head" style="background:rgba(181,123,238,0.06);border-color:rgba(181,123,238,0.2);">
+      <span class="ph-icon">🤝</span>
+      <span class="ph-name" style="color:var(--purple);">together.ai</span>
+      <span class="ph-tag" style="background:rgba(181,123,238,0.1);color:var(--purple);border:1px solid rgba(181,123,238,0.3);">NLP + FALLBACK</span>
+    </div>
+    <div class="prov-card-body">
+      <div class="prov-detail">
+        <strong>$25 free credits on signup</strong> — best model variety, especially for Qwen2.5-72B (Agent 03 sentiment). Also serves as a universal fallback if Groq or OpenRouter hit limits.<br><br>
+        <strong>Key advantage:</strong> Best for high-volume NLP classification tasks. Qwen2.5 is optimized here for structured JSON output at scale.<br><br>
+        <strong>Register:</strong> together.ai → Get Started → Free Credits
+      </div>
+      <div class="prov-models">
+        <span class="pm-tag">Qwen/Qwen2.5-72B-Instruct-Turbo</span>
+        <span class="pm-tag">meta-llama/Llama-3.3-70B-Instruct-Turbo</span>
+        <span class="pm-tag">deepseek-ai/DeepSeek-V3</span>
+      </div>
+      <div class="prov-limit">TOGETHER_API_KEY=xxxx → set in .env file</div>
+    </div>
+  </div>
+
+</div>
+
+
+<!-- ══════════════════════════════════════════════════════════ -->
+<!-- SECTION 3: SETUP STEPS -->
+<!-- ══════════════════════════════════════════════════════════ -->
+<div class="sec-label">Section 3 — Complete Setup from Zero to Running</div>
+
+<div class="steps">
+
+  <div class="step">
+    <div class="step-num" style="background:rgba(62,255,168,0.15);color:var(--mint);border:1px solid rgba(62,255,168,0.3);">1</div>
+    <div class="step-content">
+      <div class="step-title">Register on all 3 providers — takes 10 minutes total</div>
+      <div class="step-desc">Go to <strong>console.groq.com</strong>, <strong>openrouter.ai</strong>, and <strong>together.ai</strong>. Create a free account on each. Generate an API key on each platform. You will get free credits automatically — no credit card needed on Groq.</div>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="step-num" style="background:rgba(62,255,168,0.15);color:var(--mint);border:1px solid rgba(62,255,168,0.3);">2</div>
+    <div class="step-content">
+      <div class="step-title">Create your <code>.env</code> file — all keys in one place, never in code</div>
+      <div class="step-desc">In the root of your project, create a <code>.env</code> file. This is the only place API keys ever appear. <strong>Never commit this file to GitHub</strong> — add it to <code>.gitignore</code> immediately.</div>
+      <div class="step-code">
+        <span class="cm"># .env — never commit this file</span><br>
+        GROQ_API_KEY=gsk_xxxxxxxxxxxxxxxx<br>
+        OPENROUTER_API_KEY=sk-or-xxxxxxxxxxxxxxxx<br>
+        TOGETHER_API_KEY=xxxxxxxxxxxxxxxx<br><br>
+        <span class="cm"># Dev mode: "local" uses Ollama · "production" uses cloud APIs</span><br>
+        INFERENCE_MODE=production<br><br>
+        <span class="cm"># MongoDB connection</span><br>
+        MONGODB_URI=mongodb+srv://...
+      </div>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="step-num" style="background:rgba(62,255,168,0.15);color:var(--mint);border:1px solid rgba(62,255,168,0.3);">3</div>
+    <div class="step-content">
+      <div class="step-title">Install dependencies</div>
+      <div class="step-code">
+        pip install langchain langchain-groq langchain-openai langchain-ollama langgraph<br>
+        pip install python-dotenv pydantic fastapi celery redis<br>
+        pip install statsmodels scipy numpy pandas yfinance
+      </div>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="step-num" style="background:rgba(62,255,168,0.15);color:var(--mint);border:1px solid rgba(62,255,168,0.3);">4</div>
+    <div class="step-content">
+      <div class="step-title">Create <code>config/llm.py</code> — the single file that controls all model routing</div>
+      <div class="step-desc">This is the most important file. Every agent imports its LLM from here. To swap a model, you change one string in this file — nothing else in the codebase changes.</div>
+      <div class="step-code">
+        <span class="cm"># config/llm.py</span><br>
+        import os<br>
+        from dotenv import load_dotenv<br>
+        from langchain_groq import ChatGroq<br>
+        from langchain_openai import ChatOpenAI<br>
+        from langchain_ollama import ChatOllama<br><br>
+        load_dotenv()<br>
+        MODE = os.getenv("INFERENCE_MODE", "production")<br><br>
+        def get_llm(agent_id: str):<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;if MODE == "local":<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="cm"># Dev mode: all agents use local Mistral 7B via Ollama</span><br>
+        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;return ChatOllama(model="mistral:7b-instruct")<br><br>
+        &nbsp;&nbsp;&nbsp;&nbsp;<span class="cm"># Production: each agent gets its optimized model</span><br>
+        &nbsp;&nbsp;&nbsp;&nbsp;configs = {<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;"agent_01": ("groq",       "mistral-7b-instruct"),<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;"agent_02": ("openrouter", "deepseek/deepseek-chat"),<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;"agent_03": ("together",   "Qwen/Qwen2.5-72B-Instruct-Turbo"),<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;"agent_04": ("groq",       "deepseek-r1-distill-llama-70b"),<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;"agent_05": ("openrouter", "deepseek/deepseek-r1"),<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;"agent_06": ("groq",       "llama-3.3-70b-versatile"),<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;"agent_07": ("groq",       "mistral-smal-3-24b"),<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;}<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;provider, model = configs[agent_id]<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;return _build(provider, model)<br><br>
+        def _build(provider, model):<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;if provider == "groq":<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;return ChatGroq(model=model, api_key=os.getenv("GROQ_API_KEY"))<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;if provider == "openrouter":<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;return ChatOpenAI(model=model, base_url="https://openrouter.ai/api/v1",<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;api_key=os.getenv("OPENROUTER_API_KEY"))<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;if provider == "together":<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;return ChatOpenAI(model=model, base_url="https://api.together.xyz/v1",<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;api_key=os.getenv("TOGETHER_API_KEY"))
+      </div>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="step-num" style="background:rgba(62,255,168,0.15);color:var(--mint);border:1px solid rgba(62,255,168,0.3);">5</div>
+    <div class="step-content">
+      <div class="step-title">How each agent uses it — identical pattern, one line</div>
+      <div class="step-desc">Every agent in your LangGraph pipeline calls the same function. The agent doesn't know or care which provider it's using.</div>
+      <div class="step-code">
+        <span class="cm"># agents/agent_02_geopolitical.py</span><br>
+        from config.llm import get_llm<br><br>
+        llm = get_llm("agent_02")  <span class="cm"># returns DeepSeek-V3 in production</span><br>
+        response = llm.invoke(prompt)  <span class="cm"># standard LangChain call</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="step-num" style="background:rgba(62,255,168,0.15);color:var(--mint);border:1px solid rgba(62,255,168,0.3);">6</div>
+    <div class="step-content">
+      <div class="step-title">(Optional) Local dev setup with Ollama — for offline testing</div>
+      <div class="step-desc">If you want to develop without internet or test logic without spending credits, install Ollama and pull one small model. Set <code>INFERENCE_MODE=local</code> in your .env and all agents automatically use it.</div>
+      <div class="step-code">
+        <span class="cm"># Install Ollama (Linux/Mac)</span><br>
+        curl -fsSL https://ollama.com/install.sh | sh<br><br>
+        <span class="cm"># Pull Mistral 7B — works on 8GB RAM, ~4GB on disk</span><br>
+        ollama pull mistral:7b-instruct<br><br>
+        <span class="cm"># In .env: switch to local mode</span><br>
+        INFERENCE_MODE=local<br><br>
+        <span class="cm"># All 7 agents now route through Mistral 7B locally</span><br>
+        <span class="cm"># Switch back to "production" for the real demo</span>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+
+<!-- ══════════════════════════════════════════════════════════ -->
+<!-- SECTION 4: ENV VARS + RATE LIMITS -->
+<!-- ══════════════════════════════════════════════════════════ -->
+<div class="sec-label">Section 4 — Environment Variables & Rate Limit Handling</div>
+
+<div class="two-col">
+
+  <div class="box">
+    <div class="box-head" style="color:var(--mint);">🔑 All Required Environment Variables</div>
+    <div class="box-body" style="padding:0;">
+      <table class="env-table">
+        <tr>
+          <td>GROQ_API_KEY</td>
+          <td>Agents 01, 04, 06, 07</td>
+          <td>console.groq.com → API Keys</td>
+        </tr>
+        <tr>
+          <td>OPENROUTER_API_KEY</td>
+          <td>Agents 02, 05</td>
+          <td>openrouter.ai → Keys</td>
+        </tr>
+        <tr>
+          <td>TOGETHER_API_KEY</td>
+          <td>Agent 03 + all fallbacks</td>
+          <td>together.ai → Settings</td>
+        </tr>
+        <tr>
+          <td>INFERENCE_MODE</td>
+          <td>production or local</td>
+          <td>Set manually in .env</td>
+        </tr>
+        <tr>
+          <td>MONGODB_URI</td>
+          <td>MongoDB Atlas connection</td>
+          <td>Free cluster on atlas.mongodb.com</td>
+        </tr>
+        <tr>
+          <td>QDRANT_URL</td>
+          <td>Vector DB connection</td>
+          <td>Free cluster on cloud.qdrant.io</td>
+        </tr>
+        <tr>
+          <td>FRED_API_KEY</td>
+          <td>Agent 02 macro data</td>
+          <td>fred.stlouisfed.org/api_key</td>
+        </tr>
+        <tr>
+          <td>ALPHA_VANTAGE_KEY</td>
+          <td>Agent 03–04 market data</td>
+          <td>alphavantage.co/support</td>
+        </tr>
+      </table>
+    </div>
+  </div>
+
+  <div class="box">
+    <div class="box-head" style="color:var(--amber);">⚡ Rate Limit Handling — Automatic Fallback</div>
+    <div class="box-body">
+      <div style="font-size:11px;color:var(--muted2);line-height:1.7;margin-bottom:12px;">
+        If Groq's free tier is hit (500K tokens/day), the pipeline doesn't crash. Add this retry wrapper and fallback chain — it tries the primary provider, then the fallback automatically.
+      </div>
+      <div class="step-code" style="margin:0;">
+        <span class="cm"># utils/retry.py</span><br>
+        from tenacity import retry, wait_exponential, stop_after_attempt<br><br>
+        @retry(<br>
+        &nbsp;&nbsp;wait=wait_exponential(min=2, max=30),<br>
+        &nbsp;&nbsp;stop=stop_after_attempt(3)<br>
+        )<br>
+        def safe_invoke(llm, prompt):<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;return llm.invoke(prompt)<br><br>
+        <span class="cm"># If Groq rate-limits → waits 2s → retries</span><br>
+        <span class="cm"># After 3 fails → exception caught → fallback LLM used</span>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+
+<!-- ══════════════════════════════════════════════════════════ -->
+<!-- SECTION 5: COST ESTIMATE -->
+<!-- ══════════════════════════════════════════════════════════ -->
+<div class="sec-label">Section 5 — Real Cost Estimate for the Challenge</div>
+
+<table>
+  <thead>
+    <tr>
+      <th style="width:20%">Agent</th>
+      <th style="width:20%">Provider</th>
+      <th style="width:25%">Estimated Tokens per Run</th>
+      <th style="width:15%">Cost per Run</th>
+      <th style="width:20%">100 Demo Runs</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><span class="ag-ico">🗺</span> Agent 01</td>
+      <td><span class="prov pv-groq">Groq</span> Free tier</td>
+      <td style="color:var(--muted2);font-size:11px;">~500 tokens</td>
+      <td><span class="cost-free">$0.00</span></td>
+      <td style="color:var(--muted2);font-size:11px;">Within free daily limit</td>
+    </tr>
+    <tr>
+      <td><span class="ag-ico">🌍</span> Agent 02</td>
+      <td><span class="prov pv-or">OpenRouter</span></td>
+      <td style="color:var(--muted2);font-size:11px;">~8,000 tokens</td>
+      <td><span class="cost-micro">~$0.0006</span></td>
+      <td style="color:var(--muted2);font-size:11px;">~$0.06 total</td>
+    </tr>
+    <tr>
+      <td><span class="ag-ico">📡</span> Agent 03</td>
+      <td><span class="prov pv-tog">together.ai</span> Free credits</td>
+      <td style="color:var(--muted2);font-size:11px;">~3,000 tokens</td>
+      <td><span class="cost-free">From $25 credits</span></td>
+      <td style="color:var(--muted2);font-size:11px;">Uses ~$0.60 of $25 budget</td>
+    </tr>
+    <tr>
+      <td><span class="ag-ico">💹</span> Agent 04</td>
+      <td><span class="prov pv-groq">Groq</span> Free tier</td>
+      <td style="color:var(--muted2);font-size:11px;">~4,000 tokens</td>
+      <td><span class="cost-free">$0.00</span></td>
+      <td style="color:var(--muted2);font-size:11px;">Within free daily limit</td>
+    </tr>
+    <tr>
+      <td><span class="ag-ico">🧮</span> Agent 05</td>
+      <td><span class="prov pv-or">OpenRouter</span></td>
+      <td style="color:var(--muted2);font-size:11px;">~6,000 tokens</td>
+      <td><span class="cost-micro">~$0.003</span></td>
+      <td style="color:var(--muted2);font-size:11px;">~$0.30 total</td>
+    </tr>
+    <tr>
+      <td><span class="ag-ico">🛡</span> Agent 06</td>
+      <td><span class="prov pv-groq">Groq</span> Free tier</td>
+      <td style="color:var(--muted2);font-size:11px;">~5,000 tokens</td>
+      <td><span class="cost-free">$0.00</span></td>
+      <td style="color:var(--muted2);font-size:11px;">Within free daily limit</td>
+    </tr>
+    <tr>
+      <td><span class="ag-ico">📦</span> Agent 07</td>
+      <td><span class="prov pv-groq">Groq</span> Free tier</td>
+      <td style="color:var(--muted2);font-size:11px;">~3,000 tokens</td>
+      <td><span class="cost-free">$0.00</span></td>
+      <td style="color:var(--muted2);font-size:11px;">Within free daily limit</td>
+    </tr>
+    <tr style="background:var(--surface2);">
+      <td colspan="3" style="font-weight:700;font-size:12px;">TOTAL for 100 full pipeline runs</td>
+      <td colspan="2" style="font-weight:700;font-size:13px;color:var(--mint);">≈ $1.00 — covered by free credits</td>
+    </tr>
+  </tbody>
+</table>
+
+
+<!-- WARNINGS + SUMMARY -->
+<div style="margin-top:20px;display:flex;flex-direction:column;gap:12px;">
+  <div class="warn">
+    <span style="font-size:16px;flex-shrink:0;">⚠️</span>
+    <span><strong>Important:</strong> Groq's free tier has a <strong>daily</strong> reset. If you run many tests in one day and hit the limit, your agents automatically fall back to OpenRouter/together.ai credits. Build the fallback chain from day one — don't wait until it breaks during the demo.</span>
+  </div>
+  <div class="success">
+    <span style="font-size:16px;flex-shrink:0;">✅</span>
+    <span><strong>Bottom line:</strong> Your entire team needs <strong>3 free accounts</strong> (Groq + OpenRouter + together.ai), one <code>.env</code> file with the keys, and one <code>config/llm.py</code> file. That's it. The rest of your codebase never touches API providers directly — it just calls <code>get_llm("agent_xx")</code> and LangChain handles everything else. Switch between local dev and cloud production by changing one environment variable.</span>
+  </div>
+</div>
+
+
+<!-- FOOTER -->
+<div class="footer">
+  <div class="footer-note">SentinelAI · Blue Team · Inference Strategy Guide · Challenge 2026</div>
+  <div class="footer-brand"><span>Sentinel</span>AI</div>
+</div>
+
+</body>
+</html>
